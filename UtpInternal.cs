@@ -7,6 +7,7 @@ using uint64 = System.UInt64;
 using utp_context = dotnet_libutp.UtpContext;
 
 
+
 using int16 = System.Int16;
 using int32 = System.Int32;
 using int64 = System.Int64;
@@ -19,6 +20,9 @@ using utp_socket = dotnet_libutp.UtpInternal.UTPSocket;
 // TODO review big and little endian
 using uint16_big = System.UInt16;
 using uint32_big = System.UInt32;
+
+using UTPSocketKeyData = dotnet_libutp.UtpInternalUtilityClasses.UTPSocketKeyData;
+using UTPSocketKey = dotnet_libutp.UtpInternalUtilityClasses.UTPSocketKeyData;
 
 using socklen_t = System.Int32;
 	
@@ -110,6 +114,8 @@ namespace dotnet_libutp
 	    
 	    
 	    public enum MAX_EACK { MAX_EACK = 128 };
+	    
+	    
 
 	    public struct PacketFormatV1 {
 			// packet_type (4 high bits)
@@ -137,10 +143,10 @@ namespace dotnet_libutp
 		};
 
 	    public class PacketFormatAckV1 {
-			PacketFormatV1 pf;
-			byte ext_next;
-			byte ext_len;
-			byte[] acks = new byte[4];
+			public PacketFormatV1 pf;
+			public byte ext_next;
+			public byte ext_len;
+			public byte[] acks = new byte[4];
 		};
 
 		#if (defined(__SVR4) && defined(__sun))
@@ -283,7 +289,7 @@ namespace dotnet_libutp
 			public void shift(uint32 offset)
 			{
 				// the offset should never be "negative"
-				// assert(offset < 0x10000000);
+				// //assert(offset < 0x10000000);
 
 				// increase all of our base delays by this amount
 				// this is used to take clock skew into account
@@ -365,7 +371,7 @@ namespace dotnet_libutp
 				uint32 delay = sample - delay_base;
 				// sanity check. If this is triggered, something fishy is going on
 				// it means the measured sample was greater than 32 seconds!
-				//assert(delay < 0x2000000);
+				////assert(delay < 0x2000000);
 
 				cur_delay_hist[cur_delay_idx] = delay;
 				cur_delay_idx = (cur_delay_idx + 1) % CUR_DELAY_SIZE;
@@ -404,33 +410,21 @@ namespace dotnet_libutp
 			//~UTPSocket();
 			~UTPSocket()
 			{
-				#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "Killing socket");
-				#endif
+				
 
 				UtpCallbacks.utp_call_on_state_change(ctx, this, (int) UtpCallbacks.UTP_STATE.UTP_STATE_DESTROYING);
 
-				if (ctx.last_utp_socket->Equals(this)) {
+				if (ctx.last_utp_socket.Equals(this)) {
 					ctx.last_utp_socket = null;
 				}
 
 				// Remove object from the global hash table
-				UTPSocketKeyData* kd = ctx.utp_sockets.Delete(UTPSocketKey(addr, conn_id_recv));
-				assert(kd);
+				UTPSocketKeyData kd = ctx.utp_sockets.Delete(UTPSocketKey(addr, conn_id_recv));
+				//assert(kd);
 
 				// remove the socket from ack_sockets if it was there also
 				removeSocketFromAckList(this);
-
-				// Free all memory occupied by the socket object.
-				for (size_t i = 0; i <= inbuf.mask; i++) {
-					free(inbuf.elements[i]);
-				}
-				for (size_t i = 0; i <= outbuf.mask; i++) {
-					free(outbuf.elements[i]);
-				}
-				// TODO: The circular buffer should have a destructor
-				free(inbuf.elements);
-				free(outbuf.elements);
+				
 			}
 
 			public PackedSockAddr addr;
@@ -598,41 +592,16 @@ namespace dotnet_libutp
 			// the slow-start threshold, in bytes
 			public size_t ssthresh;
 
-			public void log(int level, char  *fmt, ...)
-			{
-				va_list va;
-				char[] buf = new char[4096];
-				char[] buf2 = new char[4096];
-
-				// don't bother with vsnprintf() etc calls if we're not going to log.
-				if (!ctx.would_log(level)) {
-					return;
-				}
-
-				va_start(va, fmt);
-				vsnprintf(buf, 4096, fmt, va);
-				va_end(va);
-				buf[4095] = '\0';
-
-				snprintf(buf2, 4096, "%p %s %06u %s", this, addrfmt(addr, addrbuf), conn_id_recv, buf);
-				buf2[4095] = '\0';
-
-				ctx.log_unchecked(this, buf2);
-			}
+			
 
 			
 			
 			public void schedule_ack()
 			{
 				if (ida == -1){
-					// #if UTP_DEBUG_LOGGING
-					// 		log(UTP_LOG_DEBUG, "schedule_ack");
-					// #endif
-										ida = ctx.ack_sockets.Append(this);
-									} else {
-					// #if UTP_DEBUG_LOGGING
-					// 		log(UTP_LOG_DEBUG, "schedule_ack: already in list");
-					// #endif
+					
+					ida = ctx.ack_sockets.Append(this);
+									
 				}
 			}
 
@@ -640,7 +609,7 @@ namespace dotnet_libutp
 			// this should be called every time we change mtu_floor or mtu_ceiling
 			public void mtu_search_update()
             {
-            	assert(mtu_floor <= mtu_ceiling);
+            	//assert(mtu_floor <= mtu_ceiling);
             
             	// binary search
             	mtu_last = (mtu_floor + mtu_ceiling) / 2;
@@ -654,10 +623,9 @@ namespace dotnet_libutp
             	// also set the ceiling to floor to terminate the searching
             	if (mtu_ceiling - mtu_floor <= 16) {
             		mtu_last = mtu_floor;
-            		log(UTP_LOG_MTU, "MTU [DONE] floor:%d ceiling:%d current:%d"
-            			, mtu_floor, mtu_ceiling, mtu_last);
+            	
             		mtu_ceiling = mtu_floor;
-            		assert(mtu_floor <= mtu_ceiling);
+            		//assert(mtu_floor <= mtu_ceiling);
             		// Do another search in 30 minutes
             		mtu_discover_time = UtpCallbacks.utp_call_get_milliseconds(this.ctx, this) + 30 * 60 * 1000;
             	}
@@ -669,9 +637,8 @@ namespace dotnet_libutp
             	mtu_ceiling = get_udp_mtu();
             	// Less would not pass TCP...
             	mtu_floor = 576;
-            	log(UTP_LOG_MTU, "MTU [RESET] floor:%d ceiling:%d current:%d"
-            		, mtu_floor, mtu_ceiling, mtu_last);
-            	assert(mtu_floor <= mtu_ceiling);
+            	
+            	//assert(mtu_floor <= mtu_ceiling);
             	mtu_discover_time = UtpCallbacks.utp_call_get_milliseconds(this.ctx, this) + 30 * 60 * 1000;
             }
 
@@ -760,14 +727,7 @@ namespace dotnet_libutp
             		}
                     UtpCallbacks.utp_call_on_overhead_statistics(ctx, this, true, n, type);
             	}
-				// #if UTP_DEBUG_LOGGING
-    //         		int flags2 = b1.type();
-    //         		uint16 seq_nr = b1.seq_nr;
-    //         		uint16 ack_nr = b1.ack_nr;
-    //         		log(UTP_LOG_DEBUG, "send %s len:%u id:%u timestamp:" I64u " reply_micro:%u flags:%s seq_nr:%u ack_nr:%u",
-    //         			addrfmt(addr, addrbuf), (uint)length, conn_id_send, time, reply_micro, flagnames[flags2],
-    //         			seq_nr, ack_nr);
-	   //          #endif
+				
             		send_to_addr(ctx, b, length, addr, flags);
             		removeSocketFromAckList(this);
             }
@@ -775,13 +735,13 @@ namespace dotnet_libutp
 
 			public void send_ack(bool synack)
             {
-            	PacketFormatAckV1 pfa;
-            	zeromem(&pfa);
+            	PacketFormatAckV1 pfa = new PacketFormatAckV1();
+            	//zeromem(&pfa);
             
             	size_t len;
             	last_rcv_win = get_rcv_window();
             	pfa.pf.set_version(1);
-            	pfa.pf.set_type(ST_STATE);
+            	pfa.pf.set_type(ST.ST_STATE);
             	pfa.pf.ext = 0;
             	pfa.pf.connid = conn_id_send;
             	pfa.pf.ack_nr = ack_nr;
@@ -796,7 +756,7 @@ namespace dotnet_libutp
             		// reorder count should always be 0
             		// for synacks, so this should not be
             		// as synack
-            		assert(!synack);
+            		//assert(!synack);
             		pfa.pf.ext = 1;
             		pfa.ext_next = 0;
             		pfa.ext_len = 4;
@@ -805,7 +765,7 @@ namespace dotnet_libutp
             		// reorder count should only be non-zero
             		// if the packet ack_nr + 1 has not yet
             		// been received
-            		assert(inbuf.get(ack_nr + 1) == null);
+            		//assert(inbuf.get(ack_nr + 1) == null);
             		size_t window = min<size_t>(14+16, inbuf.size());
             		// Generate bit mask of segments received.
             		for (size_t i = 0; i < window; i++) {
@@ -823,13 +783,9 @@ namespace dotnet_libutp
             		pfa.acks[3] = (byte)(m >> 24);
             		len += 4 + 2;
             
-            		#if UTP_DEBUG_LOGGING
-            		log(UTP_LOG_DEBUG, "Sending EACK %u [%u] bits:[%032b]", ack_nr, conn_id_send, m);
-            		#endif
+            		
             	} else {
-            		#if UTP_DEBUG_LOGGING
-            		log(UTP_LOG_DEBUG, "Sending ACK %u [%u]", ack_nr, conn_id_send);
-            		#endif
+            		
             	}
             
             	send_data((byte*)&pfa, len, ack_overhead);
@@ -843,23 +799,21 @@ namespace dotnet_libutp
 			{
 				ack_nr--;
 
-				#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "Sending KeepAlive ACK %u [%u]", ack_nr, conn_id_send);
-				#endif
+				
 
 				send_ack(false);
 				ack_nr++;
 			}
 
 			public static void send_rst(utp_context ctx,
-			 PackedSockAddr &addr, uint32 conn_id_send, uint16 ack_nr, uint16 seq_nr)
+			 PackedSockAddr addr, uint32 conn_id_send, uint16 ack_nr, uint16 seq_nr)
 			{
-				PacketFormatV1 pf1;
-				zeromem(&pf1);
+				PacketFormatV1 pf1 = new PacketFormatV1();
+				//zeromem(&pf1);
 
 				size_t len;
 				pf1.set_version(1);
-				pf1.set_type(ST_RESET);
+				pf1.set_type(ST.ST_RESET);
 				pf1.ext = 0;
 				pf1.connid = conn_id_send;
 				pf1.ack_nr = ack_nr;
@@ -867,9 +821,8 @@ namespace dotnet_libutp
 				pf1.windowsize = 0;
 				len = sizeof(PacketFormatV1);
 
-				//	LOG_DEBUG("%s: Sending RST id:%u seq_nr:%u ack_nr:%u", addrfmt(addr, addrbuf), conn_id_send, seq_nr, ack_nr);
-				//	LOG_DEBUG("send %s len:%u id:%u", addrfmt(addr, addrbuf), (uint)len, conn_id_send);
-				send_to_addr(ctx, (const byte*)&pf1, len, addr);
+				
+				send_to_addr(ctx, (byte*)&pf1, len, addr);
 			}
 
 			public void send_packet(OutgoingPacket pkt)
@@ -922,11 +875,10 @@ namespace dotnet_libutp
 					// for this packet
  					mtu_probe_seq = (seq_nr - 1) & ACK_NR_MASK;
  					mtu_probe_size = pkt.length;
-					assert(pkt.length >= mtu_floor);
-					assert(pkt.length <= mtu_ceiling);
+					//assert(pkt.length >= mtu_floor);
+					//assert(pkt.length <= mtu_ceiling);
  					use_as_mtu_probe = true;
-					log(UTP_LOG_MTU, "MTU [PROBE] floor:%d ceiling:%d current:%d"
-						, mtu_floor, mtu_ceiling, mtu_probe_size);
+					
  				}
 
 				pkt.transmissions++;
@@ -947,20 +899,13 @@ namespace dotnet_libutp
             	// subtract one to save space for the FIN packet
             	if (cur_window_packets >= OUTGOING_BUFFER_MAX_SIZE - 1) {
             
-            		#if UTP_DEBUG_LOGGING
-            		log(UTP_LOG_DEBUG, "is_full:false cur_window_packets:%d MAX:%d", cur_window_packets, OUTGOING_BUFFER_MAX_SIZE - 1);
-            		#endif
+            		
             
             		last_maxed_out_window = ctx.current_ms;
             		return true;
             	}
             
-            	#if UTP_DEBUG_LOGGING
-            	log(UTP_LOG_DEBUG, "is_full:%s. cur_window:%u pkt:%u max:%u cur_window_packets:%u max_window:%u"
-            		, (cur_window + bytes > max_send) ? "true" : "false"
-            		, cur_window, bytes, max_send, cur_window_packets
-            		, max_window);
-            	#endif
+            	
             
             	if (cur_window + bytes > max_send) {
             		last_maxed_out_window = ctx.current_ms;
@@ -1007,13 +952,13 @@ namespace dotnet_libutp
 				if (cur_window_packets == 0) {
 					retransmit_timeout = rto;
 					rto_timeout = ctx.current_ms + retransmit_timeout;
-					assert(cur_window == 0);
+					//assert(cur_window == 0);
 				}
 
 				size_t packet_size = get_packet_size();
 				do {
-					assert(cur_window_packets < OUTGOING_BUFFER_MAX_SIZE);
-					assert(flags == ST_DATA || flags == ST_FIN);
+					//assert(cur_window_packets < OUTGOING_BUFFER_MAX_SIZE);
+					//assert(flags == ST.ST_DATA || flags == ST.ST_FIN);
 
 					size_t added = 0;
 
@@ -1037,7 +982,7 @@ namespace dotnet_libutp
 													   pkt.payload + added);
 						outbuf.put(seq_nr - 1, pkt);
 						append = false;
-						assert(!pkt.need_resend);
+						//assert(!pkt.need_resend);
 					} else {
 						// Create the packet to send.
 						added = payload;
@@ -1050,7 +995,7 @@ namespace dotnet_libutp
 					}
 
 					if (added) {
-						assert(flags == ST_DATA);
+						//assert(flags == ST.ST_DATA);
 
 						// Fill it with data from the upper layer.
 						unsigned char *p = pkt.data + header_size + pkt.payload;
@@ -1079,7 +1024,7 @@ namespace dotnet_libutp
 							needed -= num;
 						}
 
-						assert(needed == 0);
+						//assert(needed == 0);
 					}
 					pkt.payload += added;
 					pkt.length = header_size + pkt.payload;
@@ -1114,7 +1059,7 @@ namespace dotnet_libutp
 			public void check_invariant()
             {
             	if (reorder_count > 0) {
-            		assert(inbuf.get(ack_nr + 1) == null);
+            		//assert(inbuf.get(ack_nr + 1) == null);
             	}
             
             	size_t outstanding_bytes = 0;
@@ -1123,25 +1068,18 @@ namespace dotnet_libutp
             		if (pkt == 0 || pkt.transmissions == 0 || pkt.need_resend) continue;
             		outstanding_bytes += pkt.payload;
             	}
-            	assert(outstanding_bytes == cur_window);
+            	//assert(outstanding_bytes == cur_window);
             }
             #endif
 
 			public void check_timeouts()
 			{
-				#ifdef _DEBUG
-				check_invariant();
-				#endif
+				
 
 				// this invariant should always be true
-				assert(cur_window_packets == 0 || outbuf.get(seq_nr - cur_window_packets));
+				//assert(cur_window_packets == 0 || outbuf.get(seq_nr - cur_window_packets));
 
-				#if UTP_DEBUG_LOGGING
-				log(UTP_LOG_DEBUG, "CheckTimeouts timeout:%d max_window:%u cur_window:%u "
-						 "state:%s cur_window_packets:%u",
-						 (int)(rto_timeout - ctx.current_ms), (uint)max_window, (uint)cur_window,
-						 statenames[state], cur_window_packets);
-				#endif
+				
 
 				if (state != CONN_STATE.CS_DESTROY) flush_packets();
 
@@ -1171,13 +1109,12 @@ namespace dotnet_libutp
 							// too big and not because congestion. To accelerate the binary search for
 							// the MTU, resend immediately and don't reset the window size
 							ignore_loss = true;
-							log(UTP_LOG_MTU, "MTU [PROBE-TIMEOUT] floor:%d ceiling:%d current:%d"
-								, mtu_floor, mtu_ceiling, mtu_last);
+							
 						}
 						// we dropepd the probe, clear these fields to
 						// allow us to send a new one
 						mtu_probe_seq = mtu_probe_size = 0;
-						log(UTP_LOG_MTU, "MTU [TIMEOUT]");
+						
 
 						/*
 						OutgoingPacket *pkt = (OutgoingPacket*)outbuf.get(seq_nr - cur_window_packets);
@@ -1188,7 +1125,7 @@ namespace dotnet_libutp
 						*/
 
 						// Increase RTO
-						const uint new_timeout = ignore_loss ? retransmit_timeout : retransmit_timeout * 2;
+						uint new_timeout = ignore_loss ? retransmit_timeout : retransmit_timeout * 2;
 
 						// They initiated the connection but failed to respond before the rto. 
 						// A malicious client can also spoof the destination address of a ST_SYN bringing us to this state.
@@ -1200,7 +1137,7 @@ namespace dotnet_libutp
 						}
 
 						// We initiated the connection but the other side failed to respond before the rto
-						if (retransmit_count >= 4 || (state == CS_SYN_SENT && retransmit_count >= 2)) {
+						if (retransmit_count >= 4 || (state == CONN_STATE.CS_IDLE.CS_SYN_SENT && retransmit_count >= 2)) {
 							// 4 consecutive transmissions have timed out. Kill it. If we
 							// haven't even connected yet, give up after only 2 consecutive
 							// failed transmissions.
@@ -1244,23 +1181,19 @@ namespace dotnet_libutp
 							OutgoingPacket *pkt = (OutgoingPacket*)outbuf.get(seq_nr - i - 1);
 							if (pkt == 0 || pkt.transmissions == 0 || pkt.need_resend) continue;
 							pkt.need_resend = true;
-							assert(cur_window >= pkt.payload);
+							//assert(cur_window >= pkt.payload);
 							cur_window -= pkt.payload;
 						}
 
 						if (cur_window_packets > 0) {
 							retransmit_count++;
-							// used in parse_log.py
-							log(UTP_LOG_NORMAL, "Packet timeout. Resend. seq_nr:%u. timeout:%u "
-								"max_window:%u cur_window_packets:%d"
-								, seq_nr - cur_window_packets, retransmit_timeout
-								, (uint)max_window, int(cur_window_packets));
+							
 
 							fast_timeout = true;
 							timeout_seq_nr = seq_nr;
 
 							OutgoingPacket *pkt = (OutgoingPacket*)outbuf.get(seq_nr - cur_window_packets);
-							assert(pkt);
+							//assert(pkt);
 
 							// Re-send the packet.
 							send_packet(pkt);
@@ -1273,10 +1206,7 @@ namespace dotnet_libutp
 					if (state == CONN_STATE.CS_CONNECTED_FULL && !is_full()) {
 						state = CONN_STATE.CS_CONNECTED;
 
-						#if UTP_DEBUG_LOGGING
-						log(UTP_LOG_DEBUG, "Socket writable. max_window:%u cur_window:%u packet_size:%u",
-							(uint)max_window, (uint)cur_window, (uint)get_packet_size());
-						#endif
+						
 						UtpCallbacks.utp_call_on_state_change(this.ctx, this, UTP_STATE_WRITABLE);
 					}
 
@@ -1312,9 +1242,7 @@ namespace dotnet_libutp
 				// the packet has already been acked (or not sent)
 				if (pkt == null) {
 
-					#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "got ack for:%u (already acked, or never sent)", seq);
-					#endif
+					
 
 					return 1;
 				}
@@ -1322,18 +1250,12 @@ namespace dotnet_libutp
 				// can't ack packets that haven't been sent yet!
 				if (pkt.transmissions == 0) {
 
-					#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "got ack for:%u (never sent, pkt_size:%u need_resend:%u)",
-						seq, (uint)pkt.payload, pkt.need_resend);
-					#endif
+					
 
 					return 2;
 				}
 
-				#if UTP_DEBUG_LOGGING
-				log(UTP_LOG_DEBUG, "got ack for:%u (pkt_size:%u need_resend:%u)",
-					seq, (uint)pkt.payload, pkt.need_resend);
-				#endif
+				
 
 				outbuf.put(seq, null);
 
@@ -1346,22 +1268,19 @@ namespace dotnet_libutp
 						rtt = ertt;
 						rtt_var = ertt / 2;
 						// sanity check. rtt should never be more than 6 seconds
-			//			assert(rtt < 6000);
+			//			//assert(rtt < 6000);
 					} else {
 						// Compute new round trip times
 						const int delta = (int)rtt - ertt;
 						rtt_var = rtt_var + (int)(abs(delta) - rtt_var) / 4;
 						rtt = rtt - rtt/8 + ertt/8;
 						// sanity check. rtt should never be more than 6 seconds
-			//			assert(rtt < 6000);
+			//			//assert(rtt < 6000);
 						rtt_hist.add_sample(ertt, ctx.current_ms);
 					}
 					rto = max<uint>(rtt + rtt_var * 4, 1000);
 
-					#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "rtt:%u avg:%u var:%u rto:%u",
-						ertt, rtt, rtt_var, rto);
-					#endif
+					
 
 				}
 				retransmit_timeout = rto;
@@ -1370,7 +1289,7 @@ namespace dotnet_libutp
 				// been considered timed-out, and is not included in
 				// the cur_window anymore
 				if (!pkt.need_resend) {
-					assert(cur_window >= pkt.payload);
+					//assert(cur_window >= pkt.payload);
 					cur_window -= pkt.payload;
 				}
 				free(pkt);
@@ -1404,7 +1323,7 @@ namespace dotnet_libutp
 
 					// Count the number of segments that were successfully received past it.
 					if (bits >= 0 && mask[bits>>3] & (1 << (bits & 7))) {
-						assert((int)(pkt.payload) >= 0);
+						//assert((int)(pkt.payload) >= 0);
 						acked_bytes += pkt.payload;
 						if (pkt.time_sent < now)
 							min_rtt = min<int64>(min_rtt, now - pkt.time_sent);
@@ -1434,17 +1353,7 @@ namespace dotnet_libutp
 				int resends[MAX_EACK];
 				int nr = 0;
 
-				#if UTP_DEBUG_LOGGING
-					char bitmask[1024] = {0};
-					int counter = bits;
-					for (int i = 0; i <= bits; ++i) {
-						bool bit_set = counter >= 0 && mask[counter>>3] & (1 << (counter & 7));
-						bitmask[i] = bit_set ? '1' : '0';
-						--counter;
-					}
-
-					log(UTP_LOG_DEBUG, "Got EACK [%s] base:%u", bitmask, base);
-				#endif
+				
 
 				do {
 					// we're iterating over the bits from higher sequence numbers
@@ -1496,17 +1405,14 @@ namespace dotnet_libutp
 					OutgoingPacket *pkt = (OutgoingPacket*)outbuf.get(v);
 					if (pkt == null || pkt.transmissions == 0) {
 
-						#if UTP_DEBUG_LOGGING
-						log(UTP_LOG_DEBUG, "skipping %u. pkt:%08x transmissions:%u %s",
-							v, pkt, pkt?pkt.transmissions:0, pkt?"(not sent yet?)":"(already acked?)");
-						#endif
+						
 						continue;
 					}
 
 					// Count the number of segments that were successfully received past it.
 					if (bit_set) {
 						// the selective ack should never ACK the packet we're waiting for to decrement cur_window_packets
-						assert((v & outbuf.mask) != ((seq_nr - cur_window_packets) & outbuf.mask));
+						//assert((v & outbuf.mask) != ((seq_nr - cur_window_packets) & outbuf.mask));
 						ack_packet(v);
 						continue;
 					}
@@ -1525,17 +1431,9 @@ namespace dotnet_libutp
 						}
 						resends[nr++] = v;
 
-						#if UTP_DEBUG_LOGGING
-						log(UTP_LOG_DEBUG, "no ack for %u", v);
-						#endif
+						
 
-					} else {
-
-						#if UTP_DEBUG_LOGGING
-						log(UTP_LOG_DEBUG, "not resending %u count:%d dup_ack:%u fast_resend_seq_nr:%u",
-							v, count, duplicate_ack, fast_resend_seq_nr);
-						#endif
-					}
+					} 
 				} while (--bits >= -1);
 
 				if (((base - 1 - fast_resend_seq_nr) & ACK_NR_MASK) <= OUTGOING_BUFFER_MAX_SIZE &&
@@ -1545,16 +1443,9 @@ namespace dotnet_libutp
 					// is base-1
 					resends[nr++] = (base - 1) & ACK_NR_MASK;
 
-					#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "no ack for %u", (base - 1) & ACK_NR_MASK);
-					#endif
+					
 
-				} else {
-					#if UTP_DEBUG_LOGGING
-					log(UTP_LOG_DEBUG, "not resending %u count:%d dup_ack:%u fast_resend_seq_nr:%u",
-						base - 1, count, duplicate_ack, fast_resend_seq_nr);
-					#endif
-				}
+				} 
 
 				bool back_off = false;
 				int i = 0;
@@ -1570,15 +1461,12 @@ namespace dotnet_libutp
 					// case they will not be in the send queue anymore
 					if (!pkt) continue;
 
-					// used in parse_log.py
-					log(UTP_LOG_NORMAL, "Packet %u lost. Resending", v);
+					
 
 					// On Loss
 					back_off = true;
 
-					#ifdef _DEBUG
-					++_stats.rexmit;
-					#endif
+					
 
 					send_packet(pkt);
 					fast_resend_seq_nr = (v + 1) & ACK_NR_MASK;
@@ -1600,10 +1488,10 @@ namespace dotnet_libutp
 				// the delay can never be greater than the rtt. The min_rtt
 				// variable is the RTT in microseconds
 
-				assert(min_rtt >= 0);
+				//assert(min_rtt >= 0);
 				int32 our_delay = min<uint32>(our_hist.get_value(), uint32(min_rtt));
-				assert(our_delay != INT_MAX);
-				assert(our_delay >= 0);
+				//assert(our_delay != INT_MAX);
+				//assert(our_delay >= 0);
 
 				UtpCallbacks.utp_call_on_delay_sample(this.ctx, this, our_delay / 1000);
 
@@ -1648,7 +1536,7 @@ namespace dotnet_libutp
 				// shrunk and the number of acked bytes exceeds that. This is considered no more than one full
 				// window, in order to keep the gain within sane boundries.
 
-				assert(bytes_acked > 0);
+				//assert(bytes_acked > 0);
 				double window_factor = (double)min(bytes_acked, max_window) / (double)max(max_window, bytes_acked);
 
 				double delay_factor = off_target / target;
@@ -1659,7 +1547,7 @@ namespace dotnet_libutp
 				// to the number of bytes that were acked, so that once one window has been acked (one rtt)
 				// the increase limit is not exceeded
 				// the +1. is to allow for floating point imprecision
-				assert(scaled_gain <= 1. + MAX_CWND_INCREASE_BYTES_PER_RTT * (double)min(bytes_acked, max_window) / (double)max(max_window, bytes_acked));
+				//assert(scaled_gain <= 1. + MAX_CWND_INCREASE_BYTES_PER_RTT * (double)min(bytes_acked, max_window) / (double)max(max_window, bytes_acked));
 
 				if (scaled_gain > 0 && ctx.current_ms - last_maxed_out_window > 1000) {
 					// if it was more than 1 second since we tried to send a packet
@@ -1691,26 +1579,6 @@ namespace dotnet_libutp
 				// make sure that the congestion window is below max
 				// make sure that we don't shrink our window too small
 				max_window = clamp<size_t>(max_window, MIN_WINDOW_SIZE, opt_sndbuf);
-
-				// used in parse_log.py
-				log(UTP_LOG_NORMAL, "actual_delay:%u our_delay:%d their_delay:%u off_target:%d max_window:%u "
-						"delay_base:%u delay_sum:%d target_delay:%d acked_bytes:%u cur_window:%u "
-						"scaled_gain:%f rtt:%u rate:%u wnduser:%u rto:%u timeout:%d get_microseconds:" I64u " "
-						"cur_window_packets:%u packet_size:%u their_delay_base:%u their_actual_delay:%u "
-						"average_delay:%d clock_drift:%d clock_drift_raw:%d delay_penalty:%d current_delay_sum:" I64u
-						"current_delay_samples:%d average_delay_base:%d last_maxed_out_window:" I64u " opt_sndbuf:%d "
-						"current_ms:" I64u "",
-						actual_delay, our_delay / 1000, their_hist.get_value() / 1000,
-						int(off_target / 1000), uint(max_window), uint32(our_hist.delay_base),
-						int((our_delay + their_hist.get_value()) / 1000), int(target / 1000), uint(bytes_acked),
-						(uint)(cur_window - bytes_acked), (float)(scaled_gain), rtt,
-						(uint)(max_window * 1000 / (rtt_hist.delay_base?rtt_hist.delay_base:50)),
-						(uint)max_window_user, rto, (int)(rto_timeout - ctx.current_ms),
-						UtpCallbacks.utp_call_get_microseconds(this.ctx, this), cur_window_packets, (uint)get_packet_size(),
-						their_hist.delay_base, their_hist.delay_base + their_hist.get_value(),
-						average_delay, clock_drift, clock_drift_raw, penalty / 1000,
-						current_delay_sum, current_delay_samples, average_delay_base,
-						uint64(last_maxed_out_window), int(opt_sndbuf), uint64(ctx.current_ms));
 			}
 			
 			
@@ -1732,8 +1600,8 @@ namespace dotnet_libutp
 			{
 				UTPSocket last = conn.ctx.ack_sockets[conn.ctx.ack_sockets.GetCount() - 1];
 
-				// assert(last.ida < (int)(conn.ctx.ack_sockets.GetCount()));
-				// assert(conn.ctx.ack_sockets[last.ida] == last);
+				// //assert(last.ida < (int)(conn.ctx.ack_sockets.GetCount()));
+				// //assert(conn.ctx.ack_sockets[last.ida] == last);
 				last.ida = conn.ida;
 				conn.ctx.ack_sockets[conn.ida] = last;
 				conn.ida = -1;
@@ -1818,12 +1686,6 @@ namespace dotnet_libutp
 
 			if (pk_flags >= ST.ST_NUM_STATES) return 0;
 
-			#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "Got %s. seq_nr:%u ack_nr:%u state:%s timestamp:" I64u " reply_micro:%u"
-				, flagnames[pk_flags], pk_seq_nr, pk_ack_nr, statenames[conn.state]
-				, uint64(pf1.tv_usec), (uint32)(pf1.reply_micro));
-			#endif
-
 			// mark receipt time
 			uint64 time = UtpCallbacks.utp_call_get_microseconds(conn.ctx, conn);
 
@@ -1839,15 +1701,11 @@ namespace dotnet_libutp
 			if ((pk_flags != ST.ST_SYN || conn.state != CONN_STATE.CS_SYN_RECV) && 
 				(wrapping_compare_less(conn.seq_nr - 1, pk_ack_nr, ACK_NR_MASK)
 				|| wrapping_compare_less(pk_ack_nr, conn.seq_nr - 1 - curr_window, ACK_NR_MASK))) {
-		#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "Invalid ack_nr: %u. our seq_nr: %u last unacked: %u"
-			, pk_ack_nr, conn.seq_nr, (conn.seq_nr - conn.cur_window_packets) & ACK_NR_MASK);
-		#endif
 				return 0;
 			}
 
 			// RSTs are handled earlier, since the connid matches the send id not the recv id
-			assert(pk_flags != ST.ST_RESET);
+			//assert(pk_flags != ST.ST_RESET);
 
 			// TODO: maybe send a ST_RESET if we're in CS_RESET?
 
@@ -1857,10 +1715,6 @@ namespace dotnet_libutp
 			// Data pointer
 			const byte *data = (const byte*)pf1 + conn.get_header_size();
 			if (conn.get_header_size() > len) {
-
-				#if UTP_DEBUG_LOGGING
-				conn.log(UTP_LOG_DEBUG, "Invalid packet size (less than header size)");
-				#endif
 
 				return 0;
 			}
@@ -1873,9 +1727,7 @@ namespace dotnet_libutp
 
 					if ((int)(packet_end - data) < 0 || (int)(packet_end - data) < data[-1]) {
 
-						#if UTP_DEBUG_LOGGING
-						conn.log(UTP_LOG_DEBUG, "Invalid len of extensions");
-						#endif
+						
 
 						return 0;
 					}
@@ -1894,12 +1746,6 @@ namespace dotnet_libutp
 							return 0;
 						}
 						memcpy(conn.extensions, data, 8);
-
-						#if UTP_DEBUG_LOGGING
-						conn.log(UTP_LOG_DEBUG, "got extension bits:%02x%02x%02x%02x%02x%02x%02x%02x",
-							conn.extensions[0], conn.extensions[1], conn.extensions[2], conn.extensions[3],
-							conn.extensions[4], conn.extensions[5], conn.extensions[6], conn.extensions[7]);
-						#endif
 					}
 					extension = data[-2];
 					data += data[-1];
@@ -1931,10 +1777,7 @@ namespace dotnet_libutp
 					conn.schedule_ack();
 				}
 
-				#if UTP_DEBUG_LOGGING
-				conn.log(UTP_LOG_DEBUG, "    Got old Packet/Ack (%u/%u)=%u"
-					, pk_seq_nr, conn.ack_nr, seqnr);
-				#endif
+				
 				return 0;
 			}
 
@@ -1969,8 +1812,6 @@ namespace dotnet_libutp
 						if (pk_ack_nr == ((conn.mtu_probe_seq - 1) & ACK_NR_MASK)) {
 							conn.mtu_ceiling = conn.mtu_probe_size - 1;
 							conn.mtu_search_update();
-							conn.log(UTP_LOG_MTU, "MTU [DUPACK] floor:%d ceiling:%d current:%d"
-								, conn.mtu_floor, conn.mtu_ceiling, conn.mtu_last);
 						} else {
 							// A non-probe was blocked before our probe.
 							// Can't conclude much, send a new probe
@@ -2003,13 +1844,11 @@ namespace dotnet_libutp
 				uint seq = (conn.seq_nr - conn.cur_window_packets + i) & ACK_NR_MASK;
 				OutgoingPacket pkt = (OutgoingPacket)conn.outbuf.get(seq);
 				if (pkt == 0 || pkt.transmissions == 0) continue;
-				assert((int)(pkt.payload) >= 0);
+				//assert((int)(pkt.payload) >= 0);
 				acked_bytes += pkt.payload;
 				if (conn.mtu_probe_seq && seq == conn.mtu_probe_seq) {
 					conn.mtu_floor = conn.mtu_probe_size;
 					conn.mtu_search_update();
-					conn.log(UTP_LOG_MTU, "MTU [ACK] floor:%d ceiling:%d current:%d"
-						, conn.mtu_floor, conn.mtu_ceiling, conn.mtu_last);
 				}
 
 				// in case our clock is not monotonic
@@ -2025,11 +1864,7 @@ namespace dotnet_libutp
 														 selack_ptr, selack_ptr[-1], min_rtt);
 			}
 
-			#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "acks:%d acked_bytes:%u seq_nr:%d cur_window:%u cur_window_packets:%u relative_seqnr:%u max_window:%u min_rtt:%u rtt:%u",
-				acks, (uint)acked_bytes, conn.seq_nr, (uint)conn.cur_window, conn.cur_window_packets,
-				seqnr, (uint)conn.max_window, (uint)(min_rtt / 1000), conn.rtt);
-			#endif
+			
 
 			uint64 p = pf1.tv_usec;
 
@@ -2037,7 +1872,7 @@ namespace dotnet_libutp
 
 			// get delay in both directions
 			// record the delay to report back
-			const uint32 their_delay = (uint32)(p == 0 ? 0 : time - p);
+			uint32 their_delay = (uint32)(p == 0 ? 0 : time - p);
 			conn.reply_micro = their_delay;
 			uint32 prev_delay_base = conn.their_hist.delay_base;
 			if (their_delay != 0) conn.their_hist.add_sample(their_delay, conn.ctx.current_ms);
@@ -2076,12 +1911,12 @@ namespace dotnet_libutp
 				uint32 dist_up = actual_delay - conn.average_delay_base;
 
 				if (dist_down > dist_up) {
-		//			assert(dist_up < INT_MAX / 4);
+		//			//assert(dist_up < INT_MAX / 4);
 					// average_delay_base < actual_delay, we should end up
 					// with a positive sample
 					average_delay_sample = dist_up;
 				} else {
-		//			assert(-int64(dist_down) < INT_MAX / 4);
+		//			//assert(-int64(dist_down) < INT_MAX / 4);
 					// average_delay_base >= actual_delay, we should end up
 					// with a negative sample
 					average_delay_sample = -int64(dist_down);
@@ -2093,8 +1928,8 @@ namespace dotnet_libutp
 
 					int32 prev_average_delay = conn.average_delay;
 
-					assert(conn.current_delay_sum / conn.current_delay_samples < INT_MAX);
-					assert(conn.current_delay_sum / conn.current_delay_samples > -INT_MAX);
+					//assert(conn.current_delay_sum / conn.current_delay_samples < INT_MAX);
+					//assert(conn.current_delay_sum / conn.current_delay_samples > -INT_MAX);
 					// write the new average
 					conn.average_delay = (int32)(conn.current_delay_sum / conn.current_delay_samples);
 					// each slot represents 5 seconds
@@ -2167,7 +2002,7 @@ namespace dotnet_libutp
 
 			// if the delay estimate exceeds the RTT, adjust the base_delay to
 			// compensate
-			assert(min_rtt >= 0);
+			//assert(min_rtt >= 0);
 			if (int64(conn.our_hist.get_value()) > min_rtt) {
 				conn.our_hist.shift((uint32)(conn.our_hist.get_value() - min_rtt));
 			}
@@ -2239,24 +2074,15 @@ namespace dotnet_libutp
 					// happen if we get an ack_nr that does not exceed what we have stuffed
 					// into the outgoing buffer, but does exceed what we have sent
 					if (ack_status == 2) {
-						#ifdef _DEBUG
-						OutgoingPacket* pkt = (OutgoingPacket*)conn.outbuf.get(conn.seq_nr - conn.cur_window_packets);
-						assert(pkt.transmissions == 0);
-						#endif
-
 						break;
 					}
 					conn.cur_window_packets--;
-
-					#if UTP_DEBUG_LOGGING
-					conn.log(UTP_LOG_DEBUG, "decementing cur_window_packets:%u", conn.cur_window_packets);
-					#endif
 
 				}
 
 				// #ifdef _DEBUG
 				// if (conn.cur_window_packets == 0)
-				// 	assert(conn.cur_window == 0);
+				// 	//assert(conn.cur_window == 0);
 				// #endif
 
 				// packets in front of this may have been acked by a
@@ -2268,19 +2094,12 @@ namespace dotnet_libutp
 				while (conn.cur_window_packets > 0 && !conn.outbuf.get(conn.seq_nr - conn.cur_window_packets)) {
 					conn.cur_window_packets--;
 
-					#if UTP_DEBUG_LOGGING
-					conn.log(UTP_LOG_DEBUG, "decementing cur_window_packets:%u", conn.cur_window_packets);
-					#endif
+					
 
 				}
 
-				// #ifdef _DEBUG
-				// if (conn.cur_window_packets == 0)
-				// 	assert(conn.cur_window == 0);
-				// #endif
-
 				// this invariant should always be true
-				assert(conn.cur_window_packets == 0 || conn.outbuf.get(conn.seq_nr - conn.cur_window_packets));
+				//assert(conn.cur_window_packets == 0 || conn.outbuf.get(conn.seq_nr - conn.cur_window_packets));
 
 				// flush Nagle
 				if (conn.cur_window_packets == 1) {
@@ -2308,14 +2127,6 @@ namespace dotnet_libutp
 						OutgoingPacket pkt = (OutgoingPacket*)conn.outbuf.get(conn.seq_nr - conn.cur_window_packets);
 						if (pkt && pkt.transmissions > 0) {
 
-							#if UTP_DEBUG_LOGGING
-							conn.log(UTP_LOG_DEBUG, "Packet %u fast timeout-retry.", conn.seq_nr - conn.cur_window_packets);
-							#endif
-
-							#ifdef _DEBUG
-							++conn._stats.fastrexmit;
-							#endif
-
 							conn.fast_resend_seq_nr++;
 							conn.send_packet(pkt);
 						}
@@ -2329,12 +2140,9 @@ namespace dotnet_libutp
 			}
 
 			// this invariant should always be true
-			assert(conn.cur_window_packets == 0 || conn.outbuf.get(conn.seq_nr - conn.cur_window_packets));
+			//assert(conn.cur_window_packets == 0 || conn.outbuf.get(conn.seq_nr - conn.cur_window_packets));
 
-			#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "acks:%d acked_bytes:%u seq_nr:%u cur_window:%u cur_window_packets:%u ",
-				acks, (uint)acked_bytes, conn.seq_nr, (uint)conn.cur_window, conn.cur_window_packets);
-			#endif
+			
 
 			// In case the ack dropped the current window below
 			// the max_window size, Mark the socket as writable
@@ -2361,9 +2169,7 @@ namespace dotnet_libutp
 			// Is this a finalize packet?
 			if (pk_flags == ST.ST_FIN && !conn.got_fin) {
 
-				#if UTP_DEBUG_LOGGING
-				conn.log(UTP_LOG_DEBUG, "Got FIN eof_pkt:%u", pk_seq_nr);
-				#endif
+				
 
 				conn.got_fin = true;
 				conn.eof_pkt = pk_seq_nr;
@@ -2382,12 +2188,10 @@ namespace dotnet_libutp
 				size_t count = packet_end - data;
 				if (count > 0 && !conn.read_shutdown) {
 
-					#if UTP_DEBUG_LOGGING
-					conn.log(UTP_LOG_DEBUG, "Got Data len:%u (rb:%u)", (uint)count, (uint)utp_call_get_read_buffer_size(conn.ctx, conn));
-					#endif
+					
 
 					// Post bytes to the upper layer
-					utp_call_on_read(conn.ctx, conn, data, count);
+					UtpCallbacks.utp_call_on_read(conn.ctx, conn, data, count);
 				}
 				conn.ack_nr++;
 
@@ -2398,10 +2202,7 @@ namespace dotnet_libutp
 					if (!conn.got_fin_reached && conn.got_fin && conn.eof_pkt == conn.ack_nr) {
 						conn.got_fin_reached = true;
 						conn.rto_timeout = conn.ctx.current_ms + min<uint>(conn.rto * 3, 60);
-
-						#if UTP_DEBUG_LOGGING
-						conn.log(UTP_LOG_DEBUG, "Posting EOF");
-						#endif
+						
 
 						UtpCallbacks.utp_call_on_state_change(conn.ctx, conn, UTP_STATE_EOF);
 
@@ -2436,7 +2237,7 @@ namespace dotnet_libutp
 
 					// Free the element from the reorder buffer
 					//free(p);
-					assert(conn.reorder_count > 0);
+					//assert(conn.reorder_count > 0);
 					conn.reorder_count--;
 				}
 
@@ -2449,12 +2250,6 @@ namespace dotnet_libutp
 				// is lower than the sequence number of the packet we just received
 				// something is wrong.
 				if (conn.got_fin && pk_seq_nr > conn.eof_pkt) {
-
-					// #if UTP_DEBUG_LOGGING
-					// conn.log(UTP_LOG_DEBUG, "Got an invalid packet sequence number, past EOF "
-					// 	"reorder_count:%u len:%u (rb:%u)",
-					// 	conn.reorder_count, (uint)(packet_end - data), (uint)utp_call_get_read_buffer_size(conn.ctx, conn));
-					// #endif
 					return 0;
 				}
 
@@ -2462,12 +2257,6 @@ namespace dotnet_libutp
 				// one, just drop it. We can't allocate buffer space in
 				// the inbuf entirely based on untrusted input
 				if (seqnr > 0x3ff) {
-
-					// #if UTP_DEBUG_LOGGING
-					// conn.log(UTP_LOG_DEBUG, "0x%08x: Got an invalid packet sequence number, too far off "
-					// 	"reorder_count:%u len:%u (rb:%u)",
-					// 	conn.reorder_count, (uint)(packet_end - data), (uint)utp_call_get_read_buffer_size(conn.ctx, conn));
-					// #endif
 					return 0;
 				}
 
@@ -2480,10 +2269,6 @@ namespace dotnet_libutp
 				// Has this packet already been received? (i.e. a duplicate)
 				// If that is the case, just discard it.
 				if (conn.inbuf.get(pk_seq_nr) != null) {
-					// #ifdef _DEBUG
-					// ++conn._stats.nduprecv;
-					// #endif
-
 					return 0;
 				}
 
@@ -2495,19 +2280,14 @@ namespace dotnet_libutp
 				// Insert into reorder buffer and increment the count
 				// of # of packets to be reordered.
 				// we add one to seqnr in order to leave the last
-				// entry empty, that way the assert in send_ack
+				// entry empty, that way the //assert in send_ack
 				// is valid. we have to add one to seqnr too, in order
 				// to make the circular buffer grow around the correct
 				// point (which is conn.ack_nr + 1).
-				assert(conn.inbuf.get(pk_seq_nr) == null);
-				assert((pk_seq_nr & conn.inbuf.mask) != ((conn.ack_nr+1) & conn.inbuf.mask));
+				//assert(conn.inbuf.get(pk_seq_nr) == null);
+				//assert((pk_seq_nr & conn.inbuf.mask) != ((conn.ack_nr+1) & conn.inbuf.mask));
 				conn.inbuf.put(pk_seq_nr, mem);
 				conn.reorder_count++;
-
-				#if UTP_DEBUG_LOGGING
-				conn.log(UTP_LOG_DEBUG, "0x%08x: Got out of order data reorder_count:%u len:%u (rb:%u)",
-					conn.reorder_count, (uint)(packet_end - data), (uint)utp_call_get_read_buffer_size(conn.ctx, conn));
-				#endif
 
 				conn.schedule_ack();
 			}
@@ -2522,16 +2302,16 @@ namespace dotnet_libutp
 
 
 
-		public void UTP_FreeAll(struct UTPSocketHT *utp_sockets) {
+		public void UTP_FreeAll(UTPSocketHT utp_sockets) {
 			utp_hash_iterator_t it;
-			UTPSocketKeyData* keyData;
+			UTPSocketKeyData keyData;
 			while ((keyData = utp_sockets.Iterate(it))) {
 				delete keyData.socket;
 			}
 		}
 
 		public void utp_initialize_socket(	utp_socket conn,
-									const struct sockaddr *addr,
+									 struct sockaddr *addr,
 									socklen_t addrlen,
 									bool need_seed_gen,
 									uint32 conn_seed,
@@ -2542,7 +2322,7 @@ namespace dotnet_libutp
 
 			if (need_seed_gen) {
 				do {
-					conn_seed = utp_call_get_random(conn.ctx, conn);
+					conn_seed = UtpCallbacks.utp_call_get_random(conn.ctx, conn);
 					// we identify v1 and higher by setting the first two bytes to 0x0001
 					conn_seed &= 0xffff;
 				} while (conn.ctx.utp_sockets.Lookup(UTPSocketKey(psaddr, conn_seed)));
@@ -2556,7 +2336,7 @@ namespace dotnet_libutp
 			conn.conn_id_recv			= conn_id_recv;
 			conn.conn_id_send			= conn_id_send;
 			conn.addr					= psaddr;
-			conn.ctx.current_ms		= utp_call_get_milliseconds(conn.ctx, null);
+			conn.ctx.current_ms		= UtpCallbacks.utp_call_get_milliseconds(conn.ctx, null);
 			conn.last_got_packet		= conn.ctx.current_ms;
 			conn.last_sent_packet		= conn.ctx.current_ms;
 			conn.last_measured_delay	= conn.ctx.current_ms + 0x70000000;
@@ -2575,10 +2355,6 @@ namespace dotnet_libutp
 
 			// we need to fit one packet in the window when we start the connection
 			conn.max_window = conn.get_packet_size();
-
-			#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "UTP socket initialized");
-			#endif
 		}
 
 		public utp_socket utp_create_socket(utp_context ctx)
@@ -2646,73 +2422,73 @@ namespace dotnet_libutp
 			return conn;
 		}
 
-		public int utp_context_set_option(utp_context ctx, int opt, int val)
+		public int utp_context_set_option(utp_context ctx, UTP.UTP_OPTIONS opt, int val)
 		{
 			if (ctx == null) return -1;
 
 			switch (opt) {
-    			case UTP_LOG_NORMAL:
+    			case UTP.UTP_OPTIONS.UTP_LOG_NORMAL:
 					ctx.log_normal = val ? true : false;
 					return 0;
 
-    			case UTP_LOG_MTU:
+    			case UTP.UTP_OPTIONS.UTP_LOG_MTU:
 					ctx.log_mtu = val ? true : false;
 					return 0;
 
-    			case UTP_LOG_DEBUG:
+    			case UTP.UTP_OPTIONS.UTP_LOG_DEBUG:
 					ctx.log_debug = val ? true : false;
 					return 0;
 
-    			case UTP_TARGET_DELAY:
+    			case UTP.UTP_OPTIONS.UTP_TARGET_DELAY:
 					ctx.target_delay = val;
 					return 0;
 
-				case UTP_SNDBUF:
-					assert(val >= 1);
+				case UTP.UTP_OPTIONS.UTP_SNDBUF:
+					//assert(val >= 1);
 					ctx.opt_sndbuf = val;
 					return 0;
 
-				case UTP_RCVBUF:
-					assert(val >= 1);
+				case UTP.UTP_OPTIONS.UTP_RCVBUF:
+					//assert(val >= 1);
 					ctx.opt_rcvbuf = val;
 					return 0;
 			}
 			return -1;
 		}
 
-		public int utp_context_get_option(utp_context ctx, int opt)
+		public int utp_context_get_option(utp_context ctx, UTP.UTP_OPTIONS opt)
 		{
 			if (ctx == null) return -1;
 
 			switch (opt) {
-    			case UTP_LOG_NORMAL:	return ctx.log_normal ? 1 : 0;
-    			case UTP_LOG_MTU:		return ctx.log_mtu    ? 1 : 0;
-    			case UTP_LOG_DEBUG:		return ctx.log_debug  ? 1 : 0;
-    			case UTP_TARGET_DELAY:	return ctx.target_delay;
-				case UTP_SNDBUF:		return ctx.opt_sndbuf;
-				case UTP_RCVBUF:		return ctx.opt_rcvbuf;
+    			case UTP.UTP_OPTIONS.UTP_LOG_NORMAL:	return ctx.log_normal ? 1 : 0;
+    			case UTP.UTP_OPTIONS.UTP_LOG_MTU:		return ctx.log_mtu    ? 1 : 0;
+    			case UTP.UTP_OPTIONS.UTP_LOG_DEBUG:		return ctx.log_debug  ? 1 : 0;
+    			case UTP.UTP_OPTIONS.UTP_TARGET_DELAY:	return ctx.target_delay;
+				case UTP.UTP_OPTIONS.UTP_SNDBUF:		return ctx.opt_sndbuf;
+				case UTP.UTP_OPTIONS.UTP_RCVBUF:		return ctx.opt_rcvbuf;
 			}
 			return -1;
 		}
 
 
-		public int utp_setsockopt(UTPSocket conn, int opt, int val)
+		public int utp_setsockopt(UTPSocket conn, UTP.UTP_OPTIONS opt, int val)
 		{
 			if (conn == null) return -1;
 
 			switch (opt) {
 
-				case UTP_SNDBUF:
-					assert(val >= 1);
+				case UTP.UTP_OPTIONS.UTP_SNDBUF:
+					//assert(val >= 1);
 					conn.opt_sndbuf = val;
 					return 0;
 
-				case UTP_RCVBUF:
-					assert(val >= 1);
+				case UTP.UTP_OPTIONS.UTP_RCVBUF:
+					//assert(val >= 1);
 					conn.opt_rcvbuf = val;
 					return 0;
 
-				case UTP_TARGET_DELAY:
+				case UTP.UTP_OPTIONS.UTP_TARGET_DELAY:
 					conn.target_delay = val;
 					return 0;
 			}
@@ -2720,26 +2496,26 @@ namespace dotnet_libutp
 			return -1;
 		}
 
-		public int utp_getsockopt(UTPSocket conn, int opt)
+		public int utp_getsockopt(UTPSocket conn, UTP.UTP_OPTIONS opt)
 		{
 			
 			if (conn == null) return -1;
 
 			switch (opt) {
-				case UTP_SNDBUF:		return (int) conn.opt_sndbuf;
-				case UTP_RCVBUF:		return (int) conn.opt_rcvbuf;
-				case UTP_TARGET_DELAY:	return (int) conn.target_delay;
+				case UTP.UTP_OPTIONS.UTP_SNDBUF:		return (int) conn.opt_sndbuf;
+				case UTP.UTP_OPTIONS.UTP_RCVBUF:		return (int) conn.opt_rcvbuf;
+				case UTP.UTP_OPTIONS.UTP_TARGET_DELAY:	return (int) conn.target_delay;
 			}
 
 			return -1;
 		}
 
 		// Try to connect to a specified host.
-		public int utp_connect(utp_socket conn, struct sockaddr *to, socklen_t tolen)
+		public int utp_connect(utp_socket conn, sockaddr *to, socklen_t tolen)
 		{
 			if (conn == null) return -1;
 
-			assert(conn.state == CONN_STATE.CS_UNINITIALIZED);
+			//assert(conn.state == CONN_STATE.CS_UNINITIALIZED);
 			if (conn.state != CONN_STATE.CS_UNINITIALIZED) {
 				conn.state = CONN_STATE.CS_DESTROY;
 				return -1;
@@ -2747,21 +2523,16 @@ namespace dotnet_libutp
 
 			utp_initialize_socket(conn, to, tolen, true, 0, 0, 1);
 
-			assert(conn.cur_window_packets == 0);
-			assert(conn.outbuf.get(conn.seq_nr) == null);
-			assert(sizeof(PacketFormatV1) == 20);
+			//assert(conn.cur_window_packets == 0);
+			//assert(conn.outbuf.get(conn.seq_nr) == null);
+			//assert(sizeof(PacketFormatV1) == 20);
 
 			conn.state = CONN_STATE.CS_SYN_SENT;
 			conn.ctx.current_ms = UtpCallbacks.utp_call_get_milliseconds(conn.ctx, conn);
 
 			// Create and send a connect message
 
-			// used in parse_log.py
-			conn.log(UTP_LOG_NORMAL, "UTP_Connect conn_seed:%u packet_size:%u (B) "
-					"target_delay:%u (ms) delay_history:%u "
-					"delay_base_history:%u (minutes)",
-					conn.conn_seed, PACKET_SIZE, conn.target_delay / 1000,
-					CUR_DELAY_SIZE, DELAY_BASE_HISTORY);
+			
 
 			// Setup initial timeout timer.
 			conn.retransmit_timeout = 3000;
@@ -2770,7 +2541,7 @@ namespace dotnet_libutp
 
 			// if you need compatibiltiy with 1.8.1, use this. it increases attackability though.
 			//conn.seq_nr = 1;
-			conn.seq_nr = utp_call_get_random(conn.ctx, conn);
+			conn.seq_nr = UtpCallbacks.utp_call_get_random(conn.ctx, conn);
 
 			// Create the connect packet.
 			const size_t header_size = sizeof(PacketFormatV1);
@@ -2813,15 +2584,15 @@ namespace dotnet_libutp
 		}
 
 		// Returns 1 if the UDP payload was recognized as a UTP packet, or 0 if it was not
-		public int utp_process_udp(utp_context ctx, byte *buffer, size_t len, const struct sockaddr *to, socklen_t tolen)
+		public int utp_process_udp(utp_context ctx, byte *buffer, size_t len, struct sockaddr *to, socklen_t tolen)
 		{
-			assert(ctx);
+			//assert(ctx);
 			if (!ctx) return 0;
 
-			assert(buffer);
+			//assert(buffer);
 			if (!buffer) return 0;
 
-			assert(to);
+			//assert(to);
 			if (!to) return 0;
 
 			const PackedSockAddr addr((const SOCKADDR_STORAGE*)to, tolen);
@@ -2870,9 +2641,9 @@ namespace dotnet_libutp
 					#endif
 
 					if (conn.close_requested)
-						conn.state = CS_DESTROY;
+						conn.state = CONN_STATE.CS_DESTROY;
 					else
-						conn.state = CS_RESET;
+						conn.state = CONN_STATE.CS_RESET;
 
 					UtpCallbacks.utp_call_on_overhead_statistics(conn.ctx, conn, false, len + conn.get_udp_overhead(), close_overhead);
 					const int err = (conn.state == CS_SYN_SENT) ? UTP_ECONNREFUSED : UTP_ECONNRESET;
@@ -3021,15 +2792,15 @@ namespace dotnet_libutp
 		}
 
 		// Called by utp_process_icmp_fragmentation() and utp_process_icmp_error() below
-		public static UTPSocket* parse_icmp_payload(utp_context ctx, const byte *buffer, size_t len, const struct sockaddr *to, socklen_t tolen)
+		public static UTPSocket parse_icmp_payload(utp_context ctx, const byte *buffer, size_t len, const struct sockaddr *to, socklen_t tolen)
 		{
-			assert(ctx);
+			//assert(ctx);
 			if (!ctx) return null;
 
-			assert(buffer);
+			//assert(buffer);
 			if (!buffer) return null;
 
-			assert(to);
+			//assert(to);
 			if (!to) return null;
 
 			const PackedSockAddr addr((const SOCKADDR_STORAGE*)to, tolen);
@@ -3160,13 +2931,13 @@ namespace dotnet_libutp
 		{
 			static utp_iovec iovec[UTP_IOV_MAX];
 
-			assert(conn);
+			//assert(conn);
 			if (!conn) return -1;
 
-			assert(iovec_input);
+			//assert(iovec_input);
 			if (!iovec_input) return -1;
 
-			assert(num_iovecs);
+			//assert(num_iovecs);
 			if (!num_iovecs) return -1;
 
 			if (num_iovecs > UTP_IOV_MAX)
@@ -3315,16 +3086,16 @@ namespace dotnet_libutp
 
 		public int utp_getpeername(utp_socket conn, struct sockaddr *addr, socklen_t *addrlen)
 		{
-			assert(addr);
+			//assert(addr);
 			if (!addr) return -1;
 
-			assert(addrlen);
+			//assert(addrlen);
 			if (!addrlen) return -1;
 
-			assert(conn);
+			//assert(conn);
 			if (!conn) return -1;
 
-			assert(conn.state != CS_UNINITIALIZED);
+			//assert(conn.state != CS_UNINITIALIZED);
 			if (conn.state == CS_UNINITIALIZED) return -1;
 
 			socklen_t len;
@@ -3336,10 +3107,10 @@ namespace dotnet_libutp
 
 		public int utp_get_delays(UTPSocket conn, uint32 *ours, uint32 *theirs, uint32 *age)
 		{
-			assert(conn);
+			//assert(conn);
 			if (!conn) return -1;
 
-			assert(conn.state != CS_UNINITIALIZED);
+			//assert(conn.state != CS_UNINITIALIZED);
 			if (conn.state == CONN_STATE.CS_UNINITIALIZED) {
 				if (ours)   *ours   = 0;
 				if (theirs) *theirs = 0;
@@ -3361,7 +3132,7 @@ namespace dotnet_libutp
 			
 			if (conn == null) return;
 
-			assert(conn.state != CONN_STATE.CS_UNINITIALIZED
+			//assert(conn.state != CONN_STATE.CS_UNINITIALIZED
 				&& conn.state != CONN_STATE.CS_DESTROY);
 
 			#if UTP_DEBUG_LOGGING
@@ -3390,10 +3161,6 @@ namespace dotnet_libutp
 				conn.state = CONN_STATE.CS_DESTROY;
 				break;
 			}
-
-			#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "UTP_Close end in state:%s", statenames[conn.state]);
-			#endif
 		}
 
 		public void utp_shutdown(UTPSocket conn, int how)
@@ -3410,10 +3177,7 @@ namespace dotnet_libutp
 				throw new Exception("conn.state should not be CS_UNITIALIZED or CS_DESTROY");
 			}
 			
-
-			#if UTP_DEBUG_LOGGING
-			conn.log(UTP_LOG_DEBUG, "UTP_shutdown(%d) in state:%s", how, statenames[conn.state]);
-			#endif
+			
 
 			if (how != SHUT_WR) {
 				conn.read_shutdown = true;
@@ -3470,15 +3234,7 @@ namespace dotnet_libutp
 
 		public UtpCallbacks.utp_socket_stats utp_get_stats(utp_socket socket)
 		{
-			#ifdef _DEBUG
-				
-				if (socket == null) return null;
-				return socket._stats;
-				socket._stats.mtu_guess = socket.mtu_last ? socket.mtu_last : socket.mtu_ceiling;
-				return &socket._stats;
-			#else
-				return null;
-			#endif
+			return null;
 		}
 
         

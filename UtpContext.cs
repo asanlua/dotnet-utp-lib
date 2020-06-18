@@ -29,10 +29,10 @@ namespace dotnet_libutp
 
         public uint64 current_ms;
         public utp_context_stats context_stats;
-        public UtpInternal.UTPSocket *last_utp_socket;
+        public UtpInternal.UTPSocket last_utp_socket;
         public Array<UtpInternal.UTPSocket> ack_sockets;
         public Array<RST_Info> rst_info;
-        public UTPSocketHT *utp_sockets;
+        public UTPSocketHT utp_sockets;
         public size_t target_delay;
         public size_t opt_sndbuf;
         public size_t opt_rcvbuf;
