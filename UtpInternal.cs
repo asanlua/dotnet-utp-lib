@@ -1,30 +1,30 @@
 using System;
 
-using uint16 = System.UInt16;
-using uint32 = System.UInt32;
-using uint64 = System.UInt64;
+using uint16 = System.Int64;//System.UInt16;
+using uint32 = System.Int64;//System.UInt32;
+using uint64 = System.Int64;//System.UInt64;
 
 using utp_context = dotnet_libutp.UtpContext;
 
 
 
-using int16 = System.Int16;
-using int32 = System.Int32;
-using int64 = System.Int64;
+using int16 = System.Int64;//System.Int16;
+using int32 = System.Int64;//System.Int32;
+using int64 = System.Int64;//System.Int64;
 
 //TODO review size_t
-using size_t = System.UInt32;
+using size_t = System.Int64;//System.UInt32;
 
 using utp_socket = dotnet_libutp.UtpInternal.UTPSocket;
 
 // TODO review big and little endian
-using uint16_big = System.UInt16;
-using uint32_big = System.UInt32;
+using uint16_big = System.Int64;//System.UInt16;
+using uint32_big = System.Int64;//System.UInt32;
 
 using UTPSocketKeyData = dotnet_libutp.UtpInternalUtilityClasses.UTPSocketKeyData;
 using UTPSocketKey = dotnet_libutp.UtpInternalUtilityClasses.UTPSocketKeyData;
 
-using socklen_t = System.Int32;
+using socklen_t = System.Int64;//System.Int32;
 	
 namespace dotnet_libutp
 {
@@ -42,11 +42,11 @@ namespace dotnet_libutp
 		public static int CUR_DELAY_SIZE = 3;
 		
 		// experiments suggest that a clock skew of 10 ms per 325 seconds
-		// is not impossible. Reset delay_base every 13 minutes. The clock
-		// skew is dealt with by observing the delay base in the other
+		// is not impossible. Reset delay_varBase every 13 minutes. The clock
+		// skew is dealt with by observing the delay varBase in the other
 		// direction, and adjusting our own upwards if the opposite direction
-		// delay base keeps going down
-		public static int DELAY_BASE_HISTORY = 13;
+		// delay varBase keeps going down
+		public static int DELAY_varBase_HISTORY = 13;
 		public static int MAX_WINDOW_DECAY = 100; // ms
 
 		public static int REORDER_BUFFER_SIZE = 32;
@@ -250,39 +250,39 @@ namespace dotnet_libutp
 		}
 
 		public class DelayHist {
-			uint32 delay_base;
+			uint32 delay_varBase;
 
 			// this is the history of delay samples,
-			// normalized by using the delay_base. These
+			// normalized by using the delay_varBase. These
 			// values are always greater than 0 and measures
 			// the queuing delay in microseconds
 			public uint32[] cur_delay_hist = new uint32[CUR_DELAY_SIZE];
 			public size_t cur_delay_idx;
 
-			// this is the history of delay_base. It's
+			// this is the history of delay_varBase. It's
 			// a number that doesn't have an absolute meaning
 			// only relative. It doesn't make sense to initialize
 			// it to anything other than values relative to
 			// what's been seen in the real world.
-			public uint32[] delay_base_hist = new uint32[DELAY_BASE_HISTORY];
-			public size_t delay_base_idx;
-			// the time when we last stepped the delay_base_idx
-			public uint64 delay_base_time;
+			public uint32[] delay_varBase_hist = new uint32[DELAY_varBase_HISTORY];
+			public size_t delay_varBase_idx;
+			// the time when we last stepped the delay_varBase_idx
+			public uint64 delay_varBase_time;
 
-			public bool delay_base_initialized;
+			public bool delay_varBase_initialized;
 
 			public void clear(uint64 current_ms)
 			{
-				delay_base_initialized = false;
-				delay_base = 0;
+				delay_varBase_initialized = false;
+				delay_varBase = 0;
 				cur_delay_idx = 0;
-				delay_base_idx = 0;
-				delay_base_time = current_ms;
+				delay_varBase_idx = 0;
+				delay_varBase_time = current_ms;
 				for (size_t i = 0; i < CUR_DELAY_SIZE; i++) {
 					cur_delay_hist[i] = 0;
 				}
-				for (size_t i = 0; i < DELAY_BASE_HISTORY; i++) {
-					delay_base_hist[i] = 0;
+				for (size_t i = 0; i < DELAY_varBase_HISTORY; i++) {
+					delay_varBase_hist[i] = 0;
 				}
 			}
 
@@ -291,13 +291,13 @@ namespace dotnet_libutp
 				// the offset should never be "negative"
 				// //assert(offset < 0x10000000);
 
-				// increase all of our base delays by this amount
+				// increase all of our varBase delays by this amount
 				// this is used to take clock skew into account
-				// by observing the other side's changes in its base_delay
-				for (size_t i = 0; i < DELAY_BASE_HISTORY; i++) {
-					delay_base_hist[i] += offset;
+				// by observing the other side's changes in its varBase_delay
+				for (size_t i = 0; i < DELAY_varBase_HISTORY; i++) {
+					delay_varBase_hist[i] += offset;
 				}
-				delay_base += offset;
+				delay_varBase += offset;
 			}
 
 			public void add_sample(uint32 sample, uint64 current_ms)
@@ -307,22 +307,22 @@ namespace dotnet_libutp
 				// drifting, which causes the delay samples to contain
 				// a systematic error, either they are under-
 				// estimated or over-estimated. This is why we update the
-				// delay_base every two minutes, to adjust for this.
+				// delay_varBase every two minutes, to adjust for this.
 
 				// This means the values will keep drifting and eventually wrap.
 				// We can cross the wrapping boundry in two directions, either
 				// going up, crossing the highest value, or going down, crossing 0.
 
-				// if the delay_base is close to the max value and sample actually
+				// if the delay_varBase is close to the max value and sample actually
 				// wrapped on the other end we would see something like this:
-				// delay_base = 0xffffff00, sample = 0x00000400
-				// sample - delay_base = 0x500 which is the correct difference
+				// delay_varBase = 0xffffff00, sample = 0x00000400
+				// sample - delay_varBase = 0x500 which is the correct difference
 
-				// if the delay_base is instead close to 0, and we got an even lower
-				// sample (that will eventually update the delay_base), we may see
+				// if the delay_varBase is instead close to 0, and we got an even lower
+				// sample (that will eventually update the delay_varBase), we may see
 				// something like this:
-				// delay_base = 0x00000400, sample = 0xffffff00
-				// sample - delay_base = 0xfffffb00
+				// delay_varBase = 0x00000400, sample = 0xffffff00
+				// sample - delay_varBase = 0xfffffb00
 				// this needs to be interpreted as a negative number and the actual
 				// recorded delay should be 0.
 
@@ -332,43 +332,43 @@ namespace dotnet_libutp
 				// of this relaxed rule and won't necessarily wrap signed ints.
 
 				// remove the clock offset and propagation delay.
-				// delay base is min of the sample and the current
-				// delay base. This min-operation is subject to wrapping
+				// delay varBase is min of the sample and the current
+				// delay varBase. This min-operation is subject to wrapping
 				// and care needs to be taken to correctly choose the
 				// true minimum.
 
-				// specifically the problem case is when delay_base is very small
+				// specifically the problem case is when delay_varBase is very small
 				// and sample is very large (because it wrapped past zero), sample
 				// needs to be considered the smaller
 
-				if (!delay_base_initialized) {
-					// delay_base being 0 suggests that we haven't initialized
+				if (!delay_varBase_initialized) {
+					// delay_varBase being 0 suggests that we haven't initialized
 					// it or its history with any real measurements yet. Initialize
 					// everything with this sample.
-					for (size_t i = 0; i < DELAY_BASE_HISTORY; i++) {
+					for (size_t i = 0; i < DELAY_varBase_HISTORY; i++) {
 						// if we don't have a value, set it to the current sample
-						delay_base_hist[i] = sample;
+						delay_varBase_hist[i] = sample;
 						continue;
 					}
-					delay_base = sample;
-					delay_base_initialized = true;
+					delay_varBase = sample;
+					delay_varBase_initialized = true;
 				}
 
-				if (wrapping_compare_less(sample, delay_base_hist[delay_base_idx], TIMESTAMP_MASK)) {
-					// sample is smaller than the current delay_base_hist entry
+				if (wrapping_compare_less(sample, delay_varBase_hist[delay_varBase_idx], TIMESTAMP_MASK)) {
+					// sample is smaller than the current delay_varBase_hist entry
 					// update it
-					delay_base_hist[delay_base_idx] = sample;
+					delay_varBase_hist[delay_varBase_idx] = sample;
 				}
 
-				// is sample lower than delay_base? If so, update delay_base
-				if (wrapping_compare_less(sample, delay_base, TIMESTAMP_MASK)) {
-					// sample is smaller than the current delay_base
+				// is sample lower than delay_varBase? If so, update delay_varBase
+				if (wrapping_compare_less(sample, delay_varBase, TIMESTAMP_MASK)) {
+					// sample is smaller than the current delay_varBase
 					// update it
-					delay_base = sample;
+					delay_varBase = sample;
 				}
 
 				// this operation may wrap, and is supposed to
-				uint32 delay = sample - delay_base;
+				uint32 delay = sample - delay_varBase;
 				// sanity check. If this is triggered, something fishy is going on
 				// it means the measured sample was greater than 32 seconds!
 				////assert(delay < 0x2000000);
@@ -377,17 +377,17 @@ namespace dotnet_libutp
 				cur_delay_idx = (cur_delay_idx + 1) % CUR_DELAY_SIZE;
 
 				// once every minute
-				if (current_ms - delay_base_time > 60 * 1000) {
-					delay_base_time = current_ms;
-					delay_base_idx = (delay_base_idx + 1) % DELAY_BASE_HISTORY;
-					// clear up the new delay base history spot by initializing
+				if (current_ms - delay_varBase_time > 60 * 1000) {
+					delay_varBase_time = current_ms;
+					delay_varBase_idx = (delay_varBase_idx + 1) % DELAY_varBase_HISTORY;
+					// clear up the new delay varBase history spot by initializing
 					// it to the current sample, then update it
-					delay_base_hist[delay_base_idx] = sample;
-					delay_base = delay_base_hist[0];
-					// Assign the lowest delay in the last 2 minutes to delay_base
-					for (size_t i = 0; i < DELAY_BASE_HISTORY; i++) {
-						if (wrapping_compare_less(delay_base_hist[i], delay_base, TIMESTAMP_MASK))
-							delay_base = delay_base_hist[i];
+					delay_varBase_hist[delay_varBase_idx] = sample;
+					delay_varBase = delay_varBase_hist[0];
+					// Assign the lowest delay in the last 2 minutes to delay_varBase
+					for (size_t i = 0; i < DELAY_varBase_HISTORY; i++) {
+						if (wrapping_compare_less(delay_varBase_hist[i], delay_varBase, TIMESTAMP_MASK))
+							delay_varBase = delay_varBase_hist[i];
 					}
 				}
 			}
@@ -568,7 +568,7 @@ namespace dotnet_libutp
 			// each sample that's added to current_delay_sum
 			// is subtracted from the value first, to make it
 			// a delay relative to this sample
-			public uint32 average_delay_base;
+			public uint32 average_delay_varBase;
 			// the next time we should add an average delay
 			// sample into average_delay_hist
 			public uint64 average_sample_time;
@@ -639,7 +639,7 @@ namespace dotnet_libutp
             	mtu_floor = 576;
             	
             	//assert(mtu_floor <= mtu_ceiling);
-            	mtu_discover_time = UtpCallbacks.utp_call_get_milliseconds(this.ctx, this) + 30 * 60 * 1000;
+            	mtu_discover_time = (long) UtpCallbacks.utp_call_get_milliseconds(this.ctx, this) + 30 * 60 * 1000;
             }
 
 			// Calculates the current receive window
@@ -681,8 +681,8 @@ namespace dotnet_libutp
 			public size_t get_udp_mtu()
 			{
 				socklen_t len;
-				SOCKADDR_STORAGE sa = addr.get_sockaddr_storage(&len);
-				return UtpCallbacks.utp_call_get_udp_mtu(this.ctx, this, (const struct sockaddr *)&sa, len);
+				SOCKADDR_STORAGE sa = addr.get_sockaddr_storage(len);
+				return UtpCallbacks.utp_call_get_udp_mtu(this.ctx, this, sa, (int) len);
 			}
 
 			public size_t get_udp_overhead()
@@ -702,7 +702,7 @@ namespace dotnet_libutp
             	// time stamp this packet with local time, the stamp goes into
             	// the header of every packet at the 8th byte for 8 bytes :
             	// two integers, check packet.h for more
-            	uint64 time = UtpCallbacks.utp_call_get_microseconds(ctx, this);
+            	uint64 time = (long) UtpCallbacks.utp_call_get_microseconds(ctx, this);
             
             	PacketFormatV1* b1 = (PacketFormatV1*)b;
             	b1.tv_usec = (uint32)time;
@@ -741,7 +741,7 @@ namespace dotnet_libutp
             	size_t len;
             	last_rcv_win = get_rcv_window();
             	pfa.pf.set_version(1);
-            	pfa.pf.set_type(ST.ST_STATE);
+            	pfa.pf.set_type((byte) ST.ST_STATE);
             	pfa.pf.ext = 0;
             	pfa.pf.connid = conn_id_send;
             	pfa.pf.ack_nr = ack_nr;
@@ -843,7 +843,7 @@ namespace dotnet_libutp
 
 				PacketFormatV1* p1 = (PacketFormatV1*)pkt.data;
 				p1.ack_nr = ack_nr;
-				pkt.time_sent = UtpCallbacks.utp_call_get_microseconds(this.ctx, this);
+				pkt.time_sent = (long) UtpCallbacks.utp_call_get_microseconds(this.ctx, this);
 
 				//socklen_t salen;
 				//SOCKADDR_STORAGE sa = addr.get_sockaddr_storage(&salen);
@@ -892,7 +892,7 @@ namespace dotnet_libutp
 			public bool is_full(int bytes)
             {
             	size_t packet_size = get_packet_size();
-            	if (bytes < 0) bytes = packet_size;
+            	if (bytes < 0) bytes = (int) packet_size;
             	else if (bytes > (int)packet_size) bytes = (int)packet_size;
             	size_t max_send = min(max_window, opt_sndbuf, max_window_user);
             
@@ -901,14 +901,14 @@ namespace dotnet_libutp
             
             		
             
-            		last_maxed_out_window = ctx.current_ms;
+            		last_maxed_out_window = (long) ctx.current_ms;
             		return true;
             	}
             
             	
             
             	if (cur_window + bytes > max_send) {
-            		last_maxed_out_window = ctx.current_ms;
+            		last_maxed_out_window = (long) ctx.current_ms;
             		return true;
             	}
             	return false;
@@ -944,7 +944,7 @@ namespace dotnet_libutp
 			
 			// @payload: number of bytes to send
 			// @flags: either ST_DATA, or ST_FIN
-			// @iovec: base address of iovec array
+			// @iovec: varBase address of iovec array
 			// @num_iovecs: number of iovecs in array
 			public void write_outgoing_packet(size_t payload, uint flags, struct utp_iovec *iovec, size_t num_iovecs)
 			{
@@ -998,14 +998,14 @@ namespace dotnet_libutp
 						//assert(flags == ST.ST_DATA);
 
 						// Fill it with data from the upper layer.
-						unsigned char *p = pkt.data + header_size + pkt.payload;
+						char *p = pkt.data + header_size + pkt.payload;
 						size_t needed = added;
 
 						/*
 						while (needed) {
-							*p = *(char*)iovec[0].iov_base;
+							*p = *(char*)iovec[0].iov_varBase;
 							p++;
-							iovec[0].iov_base = (char *)iovec[0].iov_base + 1;
+							iovec[0].iov_varBase = (char *)iovec[0].iov_varBase + 1;
 							needed--;
 						}
 						*/
@@ -1015,12 +1015,12 @@ namespace dotnet_libutp
 								continue;
 
 							size_t num = min<size_t>(needed, iovec[i].iov_len);
-							memcpy(p, iovec[i].iov_base, num);
+							memcpy(p, iovec[i].iov_varBase, num);
 
 							p += num;
 
 							iovec[i].iov_len -= num;
-							iovec[i].iov_base = (byte*)iovec[i].iov_base + num;	// iovec[i].iov_base += num, but without void* pointers
+							iovec[i].iov_varBase = (byte*)iovec[i].iov_varBase + num;	// iovec[i].iov_varBase += num, but without void* pointers
 							needed -= num;
 						}
 
@@ -1055,22 +1055,7 @@ namespace dotnet_libutp
 				flush_packets();
 			}
 
-			#ifdef _DEBUG
-			public void check_invariant()
-            {
-            	if (reorder_count > 0) {
-            		//assert(inbuf.get(ack_nr + 1) == null);
-            	}
-            
-            	size_t outstanding_bytes = 0;
-            	for (int i = 0; i < cur_window_packets; ++i) {
-            		OutgoingPacket *pkt = (OutgoingPacket*)outbuf.get(seq_nr - i - 1);
-            		if (pkt == 0 || pkt.transmissions == 0 || pkt.need_resend) continue;
-            		outstanding_bytes += pkt.payload;
-            	}
-            	//assert(outstanding_bytes == cur_window);
-            }
-            #endif
+			
 
 			public void check_timeouts()
 			{
@@ -1090,11 +1075,11 @@ namespace dotnet_libutp
 				case CONN_STATE.CS_CONNECTED: {
 
 					// Reset max window...
-					if ((int)(ctx.current_ms - zerowindow_time) >= 0 && max_window_user == 0) {
+					if ((int)((long) ctx.current_ms - zerowindow_time) >= 0 && max_window_user == 0) {
 						max_window_user = PACKET_SIZE;
 					}
 
-					if ((int)(ctx.current_ms - rto_timeout) >= 0
+					if ((int)((long) ctx.current_ms - rto_timeout) >= 0
 						&& rto_timeout > 0) {
 
 						bool ignore_loss = false;
@@ -1150,13 +1135,13 @@ namespace dotnet_libutp
 						}
 
 						retransmit_timeout = new_timeout;
-						rto_timeout = ctx.current_ms + new_timeout;
+						rto_timeout = (long) ctx.current_ms + new_timeout;
 
 						if (!ignore_loss) {
 							// On Timeout
 							duplicate_ack = 0;
 
-							int packet_size = get_packet_size();
+							int packet_size = (int) get_packet_size();
 
 							if ((cur_window_packets == 0) && ((int)max_window > packet_size)) {
 								// we don't have any packets in-flight, even though
@@ -1211,7 +1196,7 @@ namespace dotnet_libutp
 					}
 
 					if (state >= CONN_STATE.CS_CONNECTED && !fin_sent) {
-						if ((int)(ctx.current_ms - last_sent_packet) >= KEEPALIVE_INTERVAL) {
+						if ((int)((long) ctx.current_ms - last_sent_packet) >= KEEPALIVE_INTERVAL) {
 							send_keep_alive();
 						}
 					}
@@ -1271,9 +1256,9 @@ namespace dotnet_libutp
 			//			//assert(rtt < 6000);
 					} else {
 						// Compute new round trip times
-						const int delta = (int)rtt - ertt;
+						int delta = (int)rtt - (int) ertt;
 						rtt_var = rtt_var + (int)(abs(delta) - rtt_var) / 4;
-						rtt = rtt - rtt/8 + ertt/8;
+						rtt = (uint) (rtt - rtt/8 + ertt/8);
 						// sanity check. rtt should never be more than 6 seconds
 			//			//assert(rtt < 6000);
 						rtt_hist.add_sample(ertt, ctx.current_ms);
@@ -1284,7 +1269,7 @@ namespace dotnet_libutp
 
 				}
 				retransmit_timeout = rto;
-				rto_timeout = ctx.current_ms + rto;
+				rto_timeout = (long) ctx.current_ms + rto;
 				// if need_resend is set, this packet has already
 				// been considered timed-out, and is not included in
 				// the cur_window anymore
@@ -1292,14 +1277,13 @@ namespace dotnet_libutp
 					//assert(cur_window >= pkt.payload);
 					cur_window -= pkt.payload;
 				}
-				free(pkt);
 				retransmit_count = 0;
 				return 0;
 			}
 			
 			
 			// count the number of bytes that were acked by the EACK header
-			public size_t selective_ack_bytes(uint base, const byte* mask, byte len, int64& min_rtt)
+			public size_t selective_ack_bytes(uint varBase, byte* mask, byte len, int64& min_rtt)
 			{
 				if (cur_window_packets == 0) return 0;
 
@@ -1308,7 +1292,7 @@ namespace dotnet_libutp
 				uint64 now = UtpCallbacks.utp_call_get_microseconds(this.ctx, this);
 
 				do {
-					uint v = base + bits;
+					uint v = varBase + bits;
 
 					// ignore bits that haven't been sent yet
 					// see comment in UTPSocket::selective_ack
@@ -1338,7 +1322,7 @@ namespace dotnet_libutp
 				
 				
 			
-			public void selective_ack(uint base,  byte *mask, byte len)
+			public void selective_ack(uint varBase,  byte *mask, byte len)
 			{
 				if (cur_window_packets == 0) return;
 
@@ -1359,13 +1343,13 @@ namespace dotnet_libutp
 					// we're iterating over the bits from higher sequence numbers
 					// to lower (kind of in reverse order, wich might not be very
 					// intuitive)
-					uint v = base + bits;
+					uint v = varvarBase + bits;
 
 					// ignore bits that haven't been sent yet
 					// and bits that fall below the ACKed sequence number
 					// this can happen if an EACK message gets
 					// reordered and arrives after a packet that ACKs up past
-					// the base for thie EACK message
+					// the varBase for thie EACK message
 
 					// this is essentially the same as:
 					// if v >= seq_nr || v <= seq_nr - cur_window_packets
@@ -1436,12 +1420,12 @@ namespace dotnet_libutp
 					} 
 				} while (--bits >= -1);
 
-				if (((base - 1 - fast_resend_seq_nr) & ACK_NR_MASK) <= OUTGOING_BUFFER_MAX_SIZE &&
+				if (((varBase - 1 - fast_resend_seq_nr) & ACK_NR_MASK) <= OUTGOING_BUFFER_MAX_SIZE &&
 					count >= DUPLICATE_ACKS_BEFORE_RESEND) {
 					// if we get enough duplicate acks to start
 					// resending, the first packet we should resend
-					// is base-1
-					resends[nr++] = (base - 1) & ACK_NR_MASK;
+					// is varBase-1
+					resends[nr++] = (varBase - 1) & ACK_NR_MASK;
 
 					
 
@@ -1874,17 +1858,17 @@ namespace dotnet_libutp
 			// record the delay to report back
 			uint32 their_delay = (uint32)(p == 0 ? 0 : time - p);
 			conn.reply_micro = their_delay;
-			uint32 prev_delay_base = conn.their_hist.delay_base;
+			uint32 prev_delay_varBase = conn.their_hist.delay_varBase;
 			if (their_delay != 0) conn.their_hist.add_sample(their_delay, conn.ctx.current_ms);
 
-			// if their new delay base is less than their previous one
-			// we should shift our delay base in the other direction in order
+			// if their new delay varBase is less than their previous one
+			// we should shift our delay varBase in the other direction in order
 			// to take the clock skew into account
-			if (prev_delay_base != 0 &&
-				wrapping_compare_less(conn.their_hist.delay_base, prev_delay_base, TIMESTAMP_MASK)) {
+			if (prev_delay_varBase != 0 &&
+				wrapping_compare_less(conn.their_hist.delay_varBase, prev_delay_varBase, TIMESTAMP_MASK)) {
 				// never adjust more than 10 milliseconds
-				if (prev_delay_base - conn.their_hist.delay_base <= 10000) {
-					conn.our_hist.shift(prev_delay_base - conn.their_hist.delay_base);
+				if (prev_delay_varBase - conn.their_hist.delay_varBase <= 10000) {
+					conn.our_hist.shift(prev_delay_varBase - conn.their_hist.delay_varBase);
 				}
 			}
 
@@ -1901,30 +1885,30 @@ namespace dotnet_libutp
 				// we've recevied within the last 5 seconds. We sum
 				// all the samples and increase the count in order to
 				// calculate the average every 5 seconds. The samples
-				// are based off of the average_delay_base to deal with
+				// are varBased off of the average_delay_varBase to deal with
 				// wrapping counters.
-				if (conn.average_delay_base == 0) conn.average_delay_base = actual_delay;
+				if (conn.average_delay_varBase == 0) conn.average_delay_varBase = actual_delay;
 				int64 average_delay_sample = 0;
 				// distance walking from lhs to rhs, downwards
-				uint32 dist_down = conn.average_delay_base - actual_delay;
+				uint32 dist_down = conn.average_delay_varBase - actual_delay;
 				// distance walking from lhs to rhs, upwards
-				uint32 dist_up = actual_delay - conn.average_delay_base;
+				uint32 dist_up = actual_delay - conn.average_delay_varBase;
 
 				if (dist_down > dist_up) {
 		//			//assert(dist_up < INT_MAX / 4);
-					// average_delay_base < actual_delay, we should end up
+					// average_delay_varBase < actual_delay, we should end up
 					// with a positive sample
 					average_delay_sample = dist_up;
 				} else {
 		//			//assert(-int64(dist_down) < INT_MAX / 4);
-					// average_delay_base >= actual_delay, we should end up
+					// average_delay_varBase >= actual_delay, we should end up
 					// with a negative sample
 					average_delay_sample = -int64(dist_down);
 				}
 				conn.current_delay_sum += average_delay_sample;
 				++conn.current_delay_samples;
 
-				if (conn.ctx.current_ms > conn.average_sample_time) {
+				if ((long) conn.ctx.current_ms > conn.average_sample_time) {
 
 					int32 prev_average_delay = conn.average_delay;
 
@@ -1951,14 +1935,14 @@ namespace dotnet_libutp
 					// normalize around zero. Try to keep the min <= 0 and max >= 0
 					int adjust = 0;
 					if (min_sample > 0) {
-						// adjust all samples (and the baseline) down by min_sample
+						// adjust all samples (and the varBaseline) down by min_sample
 						adjust = -min_sample;
 					} else if (max_sample < 0) {
-						// adjust all samples (and the baseline) up by -max_sample
+						// adjust all samples (and the varBaseline) up by -max_sample
 						adjust = -max_sample;
 					}
 					if (adjust > 0) {
-						conn.average_delay_base -= adjust;
+						conn.average_delay_varBase -= adjust;
 						conn.average_delay += adjust;
 						prev_average_delay += adjust;
 					}
@@ -1976,34 +1960,34 @@ namespace dotnet_libutp
 					int32 drift = conn.average_delay - prev_average_delay;
 
 					// clock_drift is a rolling average
-					conn.clock_drift = (int64(conn.clock_drift) * 7 + drift) / 8;
+					conn.clock_drift = ((conn.clock_drift) * 7 + drift) / 8;
 					conn.clock_drift_raw = drift;
 				}
 			}
 
-			// if our new delay base is less than our previous one
-			// we should shift the other end's delay base in the other
+			// if our new delay varBase is less than our previous one
+			// we should shift the other end's delay varBase in the other
 			// direction in order to take the clock skew into account
 			// This is commented out because it creates bad interactions
 			// with our adjustment in the other direction. We don't really
 			// need our estimates of the other peer to be very accurate
 			// anyway. The problem with shifting here is that we're more
 			// likely shift it back later because of a low latency. This
-			// second shift back would cause us to shift our delay base
-			// which then get's into a death spiral of shifting delay bases
-		/*	if (prev_delay_base != 0 &&
-				wrapping_compare_less(conn.our_hist.delay_base, prev_delay_base)) {
+			// second shift back would cause us to shift our delay varBase
+			// which then get's into a death spiral of shifting delay varBases
+		/*	if (prev_delay_varBase != 0 &&
+				wrapping_compare_less(conn.our_hist.delay_varBase, prev_delay_varBase)) {
 				// never adjust more than 10 milliseconds
-				if (prev_delay_base - conn.our_hist.delay_base <= 10000) {
-					conn.their_hist.Shift(prev_delay_base - conn.our_hist.delay_base);
+				if (prev_delay_varBase - conn.our_hist.delay_varBase <= 10000) {
+					conn.their_hist.Shift(prev_delay_varBase - conn.our_hist.delay_varBase);
 				}
 			}
 		*/
 
-			// if the delay estimate exceeds the RTT, adjust the base_delay to
+			// if the delay estimate exceeds the RTT, adjust the varBase_delay to
 			// compensate
 			//assert(min_rtt >= 0);
-			if (int64(conn.our_hist.get_value()) > min_rtt) {
+			if ((conn.our_hist.get_value()) > min_rtt) {
 				conn.our_hist.shift((uint32)(conn.our_hist.get_value() - min_rtt));
 			}
 
@@ -2022,7 +2006,7 @@ namespace dotnet_libutp
 				// That will reset it to 1 after 15 seconds.
 				if (conn.max_window_user == 0)
 					// Reset max_window_user to 1 every 15 seconds.
-					conn.zerowindow_time = conn.ctx.current_ms + 15000;
+					conn.zerowindow_time = (long) conn.ctx.current_ms + 15000;
 
 				// Respond to connect message
 				// Switch to CONNECTED state.
@@ -2136,7 +2120,7 @@ namespace dotnet_libutp
 
 			// Process selective acknowledgent
 			if (selack_ptr != null) {
-				conn.selective_ack(pk_ack_nr + 2, selack_ptr, selack_ptr[-1]);
+				conn.selective_ack((uint) pk_ack_nr + 2, selack_ptr, selack_ptr[-1]);
 			}
 
 			// this invariant should always be true
@@ -2255,7 +2239,7 @@ namespace dotnet_libutp
 
 				// if the sequence number is entirely off the expected
 				// one, just drop it. We can't allocate buffer space in
-				// the inbuf entirely based on untrusted input
+				// the inbuf entirely varBased on untrusted input
 				if (seqnr > 0x3ff) {
 					return 0;
 				}
@@ -2295,7 +2279,7 @@ namespace dotnet_libutp
 			return (size_t)(packet_end - data);
 		}
 
-		public inline byte UTP_Version(PacketFormatV1 pf)
+		public byte UTP_Version(PacketFormatV1 pf)
 		{
 			return (pf.type() < ST.ST_NUM_STATES && pf.ext < 3 ? pf.version() : 0);
 		}
@@ -2389,7 +2373,7 @@ namespace dotnet_libutp
 			conn.mtu_probe_seq			= 0;
 			conn.mtu_probe_size		= 0;
 			conn.current_delay_sum		= 0;
-			conn.average_delay_base	= 0;
+			conn.average_delay_varBase	= 0;
 			conn.retransmit_count		= 0;
 			conn.rto					= 3000;
 			conn.rtt_var				= 800;
@@ -2720,7 +2704,7 @@ namespace dotnet_libutp
 				r.ack_nr = seq_nr;
 				r.timestamp = ctx.current_ms;
 
-				UTPSocket::send_rst(ctx, addr, id, seq_nr, utp_call_get_random(ctx, null));
+				send_rst(ctx, addr, id, seq_nr, utp_call_get_random(ctx, null));
 				return 1;
 			}
 
@@ -2730,7 +2714,7 @@ namespace dotnet_libutp
 				ctx.log(UTP_LOG_DEBUG, null, "Incoming connection from %s", addrfmt(addr, addrbuf));
 				#endif
 
-				UTPSocketKeyData* keyData = ctx.utp_sockets.Lookup(UTPSocketKey(addr, id + 1));
+				UTPSocketKeyData keyData = ctx.utp_sockets.Lookup(UTPSocketKey(addr, id + 1));
 				if (keyData) {
 
 					#if UTP_DEBUG_LOGGING
@@ -2774,7 +2758,7 @@ namespace dotnet_libutp
 
 				conn.send_ack(true);
 
-				utp_call_on_accept(ctx, conn, to, tolen);
+				UtpCallbacks.utp_call_on_accept(ctx, conn, to, tolen);
 
 				// we report overhead after on_accept(), because the callbacks are setup now
 				UtpCallbacks.utp_call_on_overhead_statistics(conn.ctx, conn, false, (len - read) + conn.get_udp_overhead(), header_overhead); // SYN
@@ -3053,7 +3037,7 @@ namespace dotnet_libutp
 
 			ctx.current_ms = UtpCallbacks.utp_call_get_milliseconds(ctx, null);
 
-			if (ctx.current_ms - ctx.last_check < TIMEOUT_CHECK_INTERVAL)
+			if ((long) (ctx.current_ms - ctx.last_check) < TIMEOUT_CHECK_INTERVAL)
 				return;
 
 			ctx.last_check = ctx.current_ms;
@@ -3084,7 +3068,7 @@ namespace dotnet_libutp
 			}
 		}
 
-		public int utp_getpeername(utp_socket conn, struct sockaddr *addr, socklen_t *addrlen)
+		public int utp_getpeername(utp_socket conn, sockaddr addr, socklen_t *addrlen)
 		{
 			//assert(addr);
 			if (!addr) return -1;
@@ -3096,7 +3080,7 @@ namespace dotnet_libutp
 			if (!conn) return -1;
 
 			//assert(conn.state != CS_UNINITIALIZED);
-			if (conn.state == CS_UNINITIALIZED) return -1;
+			if (conn.state == CONN_STATE.CS_UNINITIALIZED) return -1;
 
 			socklen_t len;
 			const SOCKADDR_STORAGE sa = conn.addr.get_sockaddr_storage(&len);
@@ -3108,7 +3092,7 @@ namespace dotnet_libutp
 		public int utp_get_delays(UTPSocket conn, uint32 *ours, uint32 *theirs, uint32 *age)
 		{
 			//assert(conn);
-			if (!conn) return -1;
+			if (conn == null) return -1;
 
 			//assert(conn.state != CS_UNINITIALIZED);
 			if (conn.state == CONN_STATE.CS_UNINITIALIZED) {
